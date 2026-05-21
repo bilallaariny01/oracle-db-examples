@@ -71,11 +71,9 @@ public final class OracleEmbeddingVectorStoreSample {
 
 	private static final String DEFAULT_OLLAMA_CHAT_MODEL = "qwen3:8b";
 
-	private static final int DEFAULT_OLLAMA_MAX_TOKENS = 150;
-
 	private static final int DEFAULT_VECTORSTORE_ADD_BATCH_SIZE = 16;
 
-	private static final String DEFAULT_CHUNK_BY = "vocabulary";
+	private static final String DEFAULT_CHUNK_BY = "words";
 
 	private static final int DEFAULT_CHUNK_MAX = 80;
 
@@ -83,20 +81,17 @@ public final class OracleEmbeddingVectorStoreSample {
 
 	private static final String DEFAULT_CHUNK_SPLIT = "sentence";
 
-	private static final String DEFAULT_CHUNK_VOCABULARY = "DOC_VOCAB_1 ";
-
 	/**
-	 * Utility class constructor.
+	 * Utility class; not intended to be instantiated.
 	 */
 	private OracleEmbeddingVectorStoreSample() {
 	}
 
 	/**
-	 * Starts the interactive sample that ingests a source document, indexes chunks into
-	 * Oracle Vector Store, and answers user questions with retrieved context.
-	 *
-	 * @param args application arguments (not used)
-	 * @throws Exception if startup or runtime initialization fails
+	 * Starts the sample and runs an interactive retrieval-augmented chat session backed by
+	 * Oracle vector search.
+	 * @param args command-line arguments
+	 * @throws Exception when startup or runtime initialization fails
 	 */
 	public static void main(String[] args) throws Exception {
 		try (Scanner scanner = new Scanner(System.in)) {
@@ -135,18 +130,11 @@ public final class OracleEmbeddingVectorStoreSample {
 
 			System.out.printf("Loaded %d documents as %d chunks into %s.%n", documents.size(), chunks.size(),
 					TABLE_NAME);
-			System.out.printf("Chunking setup: by=%s, vocabulary=%s, max=%d, overlap=%d, split=%s%n",
-					env("ORACLE_CHUNK_BY", DEFAULT_CHUNK_BY),
-					env("ORACLE_CHUNK_VOCABULARY", DEFAULT_CHUNK_VOCABULARY),
-					envInt("ORACLE_CHUNK_MAX", DEFAULT_CHUNK_MAX), envInt("ORACLE_CHUNK_OVERLAP", DEFAULT_CHUNK_OVERLAP),
-					env("ORACLE_CHUNK_SPLIT", DEFAULT_CHUNK_SPLIT));
-			String additionalPreferences = env("ORACLE_CHUNK_ADDITIONAL_PREFERENCES_JSON", "");
-			if (StringUtils.hasText(additionalPreferences)) {
-				System.out.printf("Additional chunk preferences: %s%n", additionalPreferences);
-			}
+			System.out.printf("Chunking setup: by=%s, max=%d, overlap=%d, split=%s%n", env("ORACLE_CHUNK_BY", "words"),
+					envInt("ORACLE_CHUNK_MAX", 80), envInt("ORACLE_CHUNK_OVERLAP", 16),
+					env("ORACLE_CHUNK_SPLIT", "sentence"));
 			System.out.printf("Vector-store add batch size: %d%n", addBatchSize);
-			System.out.printf("Embedding batching enabled: %s%n", envBoolean("ORACLE_EMBEDDING_BATCHING", false));
-			System.out.printf("ONNX load on startup enabled: %s%n", envBoolean("ORACLE_ONNX_LOAD_ON_STARTUP", false));
+			System.out.printf("Embedding batching enabled: %s%n", envBoolean("ORACLE_EMBEDDING_BATCHING"));
 			System.out.printf("Chat started with Ollama model %s.%n",
 					env("OLLAMA_CHAT_MODEL", DEFAULT_OLLAMA_CHAT_MODEL));
 			System.out.printf("Source document resource: %s%n",
@@ -189,10 +177,9 @@ public final class OracleEmbeddingVectorStoreSample {
 
 	/**
 	 * Adds chunk documents to the vector store in fixed-size batches.
-	 *
-	 * @param vectorStore the vector store instance
-	 * @param chunks the chunk documents to add
-	 * @param batchSize the number of chunks per insert batch
+	 * @param vectorStore vector store receiving the chunk embeddings
+	 * @param chunks chunked documents to persist
+	 * @param batchSize number of documents to add per batch
 	 */
 	private static void addDocumentsInBatches(OracleVectorStore vectorStore, List<Document> chunks, int batchSize) {
 		if (batchSize <= 0) {
@@ -205,13 +192,13 @@ public final class OracleEmbeddingVectorStoreSample {
 	}
 
 	/**
-	 * Builds a chat response using retrieved context and session memory.
-	 *
-	 * @param assistant the configured chat client
-	 * @param sessionId the session identifier for memory continuity
-	 * @param userInput the user prompt
-	 * @param results retrieved vector store documents
-	 * @return assistant response text
+	 * Sends the user prompt and retrieved context to the assistant and returns the generated
+	 * answer.
+	 * @param assistant configured chat client
+	 * @param sessionId active session identifier
+	 * @param userInput user prompt text
+	 * @param results retrieved vector search documents
+	 * @return assistant response content
 	 */
 	private static String answerWithRetrievedContext(ChatClient assistant, String sessionId, String userInput,
 			List<Document> results) {
@@ -239,12 +226,12 @@ public final class OracleEmbeddingVectorStoreSample {
 	}
 
 	/**
-	 * Creates a JDBC-backed repository for chat sessions in Oracle.
-	 *
-	 * @param dataSource datasource used to persist sessions
-	 * @return session repository implementation
+	 * Creates the JDBC-backed session repository used for conversational memory.
+	 * @param dataSource JDBC data source
+	 * @return Oracle JDBC session repository
 	 */
 	private static SessionRepository sessionRepository(DataSource dataSource) {
+
 		return JdbcSessionRepository.builder()
 			.dataSource(dataSource)
 			.dialect(new OracleJdbcSessionRepositoryDialect())
@@ -252,10 +239,9 @@ public final class OracleEmbeddingVectorStoreSample {
 	}
 
 	/**
-	 * Formats retrieved vector-store chunks into a textual context block.
-	 *
-	 * @param results retrieved documents
-	 * @return formatted context text for prompt injection
+	 * Formats retrieved documents into a readable multi-chunk context block for prompting.
+	 * @param results retrieved vector search documents
+	 * @return prompt-ready context string
 	 */
 	private static String retrievedContext(List<Document> results) {
 		if (results.isEmpty()) {
@@ -278,12 +264,11 @@ public final class OracleEmbeddingVectorStoreSample {
 	}
 
 
-
 	/**
-	 * Loads the source document from the classpath using the Oracle document reader.
-	 *
-	 * @param dataSource datasource used by the Oracle document reader
-	 * @return loaded documents from the configured classpath resource
+	 * Loads source documents from the configured classpath resource using Oracle document
+	 * loading.
+	 * @param dataSource JDBC data source
+	 * @return loaded source documents
 	 */
 	private static List<Document> loadDocuments(DataSource dataSource) {
 		String resourcePath = env("ORACLE_SOURCE_DOCUMENT_RESOURCE", DEFAULT_SOURCE_DOC_RESOURCE);
@@ -292,23 +277,21 @@ public final class OracleEmbeddingVectorStoreSample {
 			throw new IllegalStateException(
 					"Resource not found on classpath: " + resourcePath + " (add it under src/main/resources)");
 		}
-		OracleDocumentReader reader = OracleDocumentReader.builder(dataSource, resource)
+		OracleDocumentReader reader = OracleDocumentReader.builder(dataSource)
+			.resource(resource)
 			.preferences(OracleDocumentPreferences.builder().format("TEXT").build())
 			.build();
 		return reader.get();
 	}
 
 	/**
-	 * Creates the Oracle document splitter with preferences sourced from environment
-	 * variables.
-	 *
-	 * @param dataSource datasource used for Oracle chunking operations
-	 * @return configured document splitter
+	 * Builds a document splitter configured from chunking-related environment variables.
+	 * @param dataSource JDBC data source
+	 * @return configured Oracle document splitter
 	 */
 	private static DocumentSplitter documentSplitter(DataSource dataSource) {
-		String chunkBy = env("ORACLE_CHUNK_BY", DEFAULT_CHUNK_BY);
 		OracleChunkingPreferences.Builder preferencesBuilder = OracleChunkingPreferences.builder()
-			.by(chunkBy)
+			.by(env("ORACLE_CHUNK_BY", DEFAULT_CHUNK_BY))
 			.max(envInt("ORACLE_CHUNK_MAX", DEFAULT_CHUNK_MAX))
 			.overlap(envInt("ORACLE_CHUNK_OVERLAP", DEFAULT_CHUNK_OVERLAP))
 			.split(env("ORACLE_CHUNK_SPLIT", DEFAULT_CHUNK_SPLIT))
@@ -316,31 +299,30 @@ public final class OracleEmbeddingVectorStoreSample {
 			.normalize("all")
 			.extended(true);
 
-		if ("vocabulary".equalsIgnoreCase(chunkBy)) {
-			preferencesBuilder.vocabulary(env("ORACLE_CHUNK_VOCABULARY", DEFAULT_CHUNK_VOCABULARY));
-		}
 
 		return DocumentSplitter.builder(dataSource).preferences(preferencesBuilder.build()).build();
 	}
 
 
+
+
 	/**
-	 * Creates the Oracle embedding model and optionally configures ONNX load-on-startup.
-	 *
-	 * @param dataSource datasource used by the embedding model
-	 * @param dimensions embedding dimensions
-	 * @return configured embedding model
+	 * Creates an Oracle embedding model using default or ONNX-on-startup settings from the
+	 * environment.
+	 * @param dataSource JDBC data source
+	 * @param dimensions embedding vector dimensions
+	 * @return configured Oracle embedding model
 	 */
 	private static OracleEmbeddingModel embeddingModel(DataSource dataSource, int dimensions) {
 		String model = env("ORACLE_EMBEDDING_MODEL", DEFAULT_MODEL);
 		OracleEmbeddingOptions options = OracleEmbeddingOptions.builder()
 			.model(model)
 			.dimensions(dimensions)
-			.batching(envBoolean("ORACLE_EMBEDDING_BATCHING", false))
+			.batching(envBoolean("ORACLE_EMBEDDING_BATCHING"))
 			.preferences(OracleEmbeddingPreferences.builder().provider("database").model(model).build())
 			.build();
 
-		boolean onnxLoadOnStartup = envBoolean("ORACLE_ONNX_LOAD_ON_STARTUP", false);
+		boolean onnxLoadOnStartup = envBoolean("ORACLE_ONNX_LOAD_ON_STARTUP");
 		if (!onnxLoadOnStartup) {
 			return new OracleEmbeddingModel(dataSource, options);
 		}
@@ -367,7 +349,8 @@ public final class OracleEmbeddingVectorStoreSample {
 				throw new IllegalStateException("When ORACLE_ONNX_LOAD_ON_STARTUP=true and cloud mode is used, "
 						+ "ORACLE_ONNX_URI is required.");
 			}
-			return builder.onnxCredential(StringUtils.hasText(onnxCredential) ? onnxCredential : null)
+			return builder
+				.onnxCredential(StringUtils.hasText(onnxCredential) ? onnxCredential : null)
 				.onnxUri(onnxUri)
 				.build();
 		}
@@ -382,9 +365,8 @@ public final class OracleEmbeddingVectorStoreSample {
 	}
 
 	/**
-	 * Creates the Ollama chat model used by the assistant.
-	 *
-	 * @return configured chat model
+	 * Creates the Ollama-backed chat model used by the assistant.
+	 * @return configured Ollama chat model
 	 */
 	private static ChatModel ollamaChatModel() {
 		String modelName = env("OLLAMA_CHAT_MODEL", DEFAULT_OLLAMA_CHAT_MODEL);
@@ -401,8 +383,7 @@ public final class OracleEmbeddingVectorStoreSample {
 	}
 
 	/**
-	 * Creates the Ollama API client.
-	 *
+	 * Creates an Ollama API client with the configured base URL.
 	 * @return configured Ollama API client
 	 */
 	private static OllamaApi ollamaApi() {
@@ -410,9 +391,8 @@ public final class OracleEmbeddingVectorStoreSample {
 	}
 
 	/**
-	 * Creates the datasource from required Oracle JDBC environment variables.
-	 *
-	 * @return configured datasource
+	 * Builds the Oracle JDBC data source from required environment variables.
+	 * @return configured JDBC data source
 	 */
 	private static DriverManagerDataSource dataSource() {
 		DriverManagerDataSource dataSource = new DriverManagerDataSource();
@@ -423,11 +403,9 @@ public final class OracleEmbeddingVectorStoreSample {
 	}
 
 	/**
-	 * Resolves a required environment variable.
-	 *
+	 * Reads a required environment variable and throws when missing or blank.
 	 * @param name environment variable name
-	 * @return trimmed environment value
-	 * @throws IllegalStateException when the variable is missing or blank
+	 * @return trimmed environment variable value
 	 */
 	private static String requiredEnv(String name) {
 		String value = System.getenv(name);
@@ -438,11 +416,10 @@ public final class OracleEmbeddingVectorStoreSample {
 	}
 
 	/**
-	 * Resolves an optional environment variable with fallback default.
-	 *
+	 * Reads an optional environment variable with a default fallback.
 	 * @param name environment variable name
-	 * @param defaultValue default value when not set
-	 * @return trimmed environment value or the default
+	 * @param defaultValue value used when the environment variable is not set
+	 * @return trimmed value or default fallback
 	 */
 	private static String env(String name, String defaultValue) {
 		String value = System.getenv(name);
@@ -450,11 +427,10 @@ public final class OracleEmbeddingVectorStoreSample {
 	}
 
 	/**
-	 * Resolves an optional integer environment variable with fallback default.
-	 *
+	 * Reads an integer environment variable with a default fallback.
 	 * @param name environment variable name
-	 * @param defaultValue default value when not set
-	 * @return parsed integer value or the default
+	 * @param defaultValue value used when the environment variable is not set
+	 * @return parsed integer value or default fallback
 	 */
 	private static int envInt(String name, int defaultValue) {
 		String value = System.getenv(name);
@@ -462,15 +438,13 @@ public final class OracleEmbeddingVectorStoreSample {
 	}
 
 	/**
-	 * Resolves an optional boolean environment variable with fallback default.
-	 *
+	 * Reads a boolean environment variable.
 	 * @param name environment variable name
-	 * @param defaultValue default value when not set
-	 * @return parsed boolean value or the default
+	 * @return {@code true} when set to a parsable true value; otherwise {@code false}
 	 */
-	private static boolean envBoolean(String name, boolean defaultValue) {
+	private static boolean envBoolean(String name) {
 		String value = System.getenv(name);
-		return StringUtils.hasText(value) ? Boolean.parseBoolean(value.trim()) : defaultValue;
+		return StringUtils.hasText(value) && Boolean.parseBoolean(value.trim());
 	}
 
 }
