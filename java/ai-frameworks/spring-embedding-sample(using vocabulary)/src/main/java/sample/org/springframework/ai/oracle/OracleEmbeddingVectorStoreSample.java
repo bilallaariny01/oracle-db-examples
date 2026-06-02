@@ -1,17 +1,6 @@
 /*
- * Copyright 2026-present the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright (c) 2026, Oracle and/or its affiliates. All rights reserved.
+ * Licensed under the Universal Permissive License v 1.0 as shown at https://oss.oracle.com/licenses/upl/
  */
 
 package sample.org.springframework.ai.oracle;
@@ -41,8 +30,10 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.util.StringUtils;
 
+import java.sql.Connection;
 import java.util.List;
 import java.util.Scanner;
 import javax.sql.DataSource;
@@ -55,7 +46,6 @@ public final class OracleEmbeddingVectorStoreSample {
 
     private static final String VECTOR_TABLE_NAME = "SPRING_AI_ORACLE_SAMPLE_STORE";
     private static final String DEFAULT_SOURCE_RESOURCE = "sample-documents/oracle-sample.md";
-    private static final String DEFAULT_EMBEDDING_MODEL = "ALL_MINILM_L12_V2";
     private static final int DEFAULT_EMBEDDING_DIMENSIONS = 384;
     private static final int DEFAULT_ADD_BATCH_SIZE = 16;
 
@@ -83,6 +73,7 @@ public final class OracleEmbeddingVectorStoreSample {
             int dimensions = envInt("ORACLE_EMBEDDING_DIMENSIONS", DEFAULT_EMBEDDING_DIMENSIONS);
             String sessionId = env("ORACLE_SAMPLE_SESSION_ID", DEFAULT_SESSION_ID);
 
+            initializeSessionSchema(dataSource);
             SessionRepository repository = buildSessionRepository(dataSource);
             SessionService sessionService = DefaultSessionService.builder().sessionRepository(repository).build();
             SessionMemoryAdvisor memoryAdvisor = SessionMemoryAdvisor.builder(sessionService)
@@ -166,8 +157,7 @@ public final class OracleEmbeddingVectorStoreSample {
         System.out.printf("Vector-store add batch size: %d%n", addBatchSize);
         System.out.printf("Embedding batching enabled: %s%n",
                 envBoolean("ORACLE_EMBEDDING_BATCHING", false));
-        System.out.printf("ONNX load on startup enabled: %s%n",
-                envBoolean("ORACLE_ONNX_LOAD_ON_STARTUP", false));
+        System.out.printf("ONNX load on startup enabled: %s%n", true);
         System.out.printf("Chat started with Ollama model %s.%n",
                 env("OLLAMA_CHAT_MODEL", DEFAULT_OLLAMA_CHAT_MODEL));
         System.out.printf("Source document resource: %s%n",
@@ -237,6 +227,12 @@ public final class OracleEmbeddingVectorStoreSample {
                 .build();
     }
 
+    private static void initializeSessionSchema(DataSource dataSource) throws Exception {
+        try (Connection connection = dataSource.getConnection()) {
+            ScriptUtils.executeSqlScript(connection, new ClassPathResource("session.sql"));
+        }
+    }
+
     private static List<Document> loadSourceDocuments(DataSource dataSource) {
         String resourcePath = env("ORACLE_SOURCE_DOCUMENT_RESOURCE", DEFAULT_SOURCE_RESOURCE);
         Resource resource = new ClassPathResource(resourcePath);
@@ -271,55 +267,22 @@ public final class OracleEmbeddingVectorStoreSample {
     }
 
     private static OracleEmbeddingModel buildEmbeddingModel(DataSource dataSource, int dimensions) {
-        String model = env("ORACLE_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL);
         OracleEmbeddingOptions options = OracleEmbeddingOptions.builder()
-                .model(model)
+                .model(AllMiniLmL12V2EmbeddingModel.MODEL_NAME)
                 .dimensions(dimensions)
                 .batching(envBoolean("ORACLE_EMBEDDING_BATCHING", false))
-                .preferences(OracleEmbeddingPreferences.builder().provider("database").model(model).build())
+                .preferences(OracleEmbeddingPreferences.builder()
+                        .provider("database")
+                        .model(AllMiniLmL12V2EmbeddingModel.MODEL_NAME)
+                        .build())
                 .build();
 
-        boolean onnxLoadOnStartup = envBoolean("ORACLE_ONNX_LOAD_ON_STARTUP", false);
-        if (!onnxLoadOnStartup) {
-            return new OracleEmbeddingModel(dataSource, options);
-        }
-
-        String onnxDirectoryAlias = env("ORACLE_ONNX_DIRECTORY_ALIAS", "");
-        String onnxFile = env("ORACLE_ONNX_FILE", "");
-        String onnxUri = env("ORACLE_ONNX_URI", "");
-        String onnxCredential = env("ORACLE_ONNX_CREDENTIAL", "");
-
-        boolean hasLocalConfig = StringUtils.hasText(onnxDirectoryAlias) || StringUtils.hasText(onnxFile);
-        boolean hasCloudConfig = StringUtils.hasText(onnxUri) || StringUtils.hasText(onnxCredential);
-        if (hasLocalConfig && hasCloudConfig) {
-            throw new IllegalStateException(
-                    "Set either local ONNX config (ORACLE_ONNX_DIRECTORY_ALIAS/ORACLE_ONNX_FILE) "
-                            + "or cloud ONNX config (ORACLE_ONNX_URI with optional ORACLE_ONNX_CREDENTIAL), not both.");
-        }
-
-        OracleEmbeddingModel.Builder builder = OracleEmbeddingModel.builder(dataSource)
+        return OracleEmbeddingModel.builder(dataSource)
                 .defaultOptions(options)
                 .initializeOnStartup(true)
-                .onnxModelName(model);
-
-        if (hasCloudConfig) {
-            if (!StringUtils.hasText(onnxUri)) {
-                throw new IllegalStateException(
-                        "When ORACLE_ONNX_LOAD_ON_STARTUP=true and cloud mode is used, ORACLE_ONNX_URI is required.");
-            }
-            return builder.onnxCredential(StringUtils.hasText(onnxCredential) ? onnxCredential : null)
-                    .onnxUri(onnxUri)
-                    .build();
-        }
-
-        if (!StringUtils.hasText(onnxDirectoryAlias) || !StringUtils.hasText(onnxFile)) {
-            throw new IllegalStateException(
-                    "When ORACLE_ONNX_LOAD_ON_STARTUP=true, set local ONNX vars "
-                            + "(ORACLE_ONNX_DIRECTORY_ALIAS and ORACLE_ONNX_FILE) or cloud ONNX vars "
-                            + "(ORACLE_ONNX_URI with optional ORACLE_ONNX_CREDENTIAL).");
-        }
-
-        return builder.onnxDirectoryAlias(onnxDirectoryAlias).onnxFile(onnxFile).build();
+                .onnxModelName(AllMiniLmL12V2EmbeddingModel.MODEL_NAME)
+                .onnxUri(AllMiniLmL12V2EmbeddingModel.modelUri())
+                .build();
     }
 
     private static ChatModel buildOllamaChatModel() {

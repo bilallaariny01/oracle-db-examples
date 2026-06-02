@@ -50,6 +50,11 @@ Core libraries used:
 - Chat model pulled in Ollama (default: `qwen3:8b`)
 - Session tables required by `spring-ai-session-jdbc` must exist in your Oracle schema
 
+Session schema options for this sample:
+
+- Run [`src/main/resources/session.sql`](src/main/resources/session.sql) manually in your Oracle schema before starting the app.
+- Or let the app run `session.sql` automatically at startup (current default behavior in the sample code).
+
 If using ONNX initialization at startup, Oracle must have access to an ONNX file through either:
 
 - local Oracle directory alias + file name
@@ -186,6 +191,8 @@ This allows cross-turn memory in the chat flow using:
 
 - session id: `ORACLE_SAMPLE_SESSION_ID` (or default)
 - user id: fixed default `oracle-sample-user`
+
+The required session tables are defined in `src/main/resources/session.sql`. You can pre-run that script yourself or rely on startup auto-initialization in code.
 
 ## Current Demo-Oriented Table Reset Behavior
 

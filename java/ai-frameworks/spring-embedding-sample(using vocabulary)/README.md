@@ -19,6 +19,11 @@ The sample main class is:
 4. A DB user that can run `DBMS_VECTOR_CHAIN` operations used by this sample
 5. Ollama running locally (default base URL: `http://localhost:11434`)
 
+Session schema setup options:
+
+1. Run `src/main/resources/session.sql` manually in your Oracle schema before startup.
+2. Or let the sample execute `session.sql` automatically at startup (current default behavior).
+
 ## Required Environment Variables
 
 Set these before running:
@@ -131,3 +136,4 @@ Do not mix local and cloud ONNX variables in the same run.
 1. The sample recreates vector-store table `SPRING_AI_ORACLE_SAMPLE_STORE` on startup.
 2. If `ORACLE_SOURCE_DOCUMENT_RESOURCE` is invalid, startup fails with a classpath resource error.
 3. If vocabulary mode is enabled and the vocabulary name is missing/invalid, chunking fails.
+4. Session-memory tables come from `src/main/resources/session.sql`; you can pre-run the script or use startup auto-initialization.
