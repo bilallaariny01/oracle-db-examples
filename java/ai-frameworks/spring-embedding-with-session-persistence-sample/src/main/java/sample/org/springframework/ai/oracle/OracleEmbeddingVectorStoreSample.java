@@ -11,6 +11,8 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
+import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
 import org.springframework.ai.oracle.chunking.DocumentSplitter;
 import org.springframework.ai.oracle.chunking.OracleChunkingPreferences;
 import org.springframework.ai.oracle.embedding.OracleEmbeddingModel;
@@ -25,6 +27,7 @@ import org.springframework.ai.session.advisor.SessionMemoryAdvisor;
 import org.springframework.ai.session.jdbc.JdbcSessionRepository;
 import org.springframework.ai.session.jdbc.OracleJdbcSessionRepositoryDialect;
 import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.oracle.OracleVectorStore;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
@@ -88,6 +91,8 @@ public final class OracleEmbeddingVectorStoreSample {
             OracleVectorStore vectorStore = OracleVectorStore.builder(jdbcTemplate, embeddingModel)
                     .tableName(VECTOR_TABLE_NAME)
                     .dimensions(dimensions)
+                    .distanceType(OracleVectorStore.OracleVectorStoreDistanceType.COSINE)
+                    .forcedNormalization(true)
                     .initializeSchema(true)
                     .removeExistingVectorStoreTable(true)
                     .build();
@@ -97,14 +102,15 @@ public final class OracleEmbeddingVectorStoreSample {
             List<Document> chunks = buildDocumentSplitter(dataSource).split(documents);
             int addBatchSize = envInt("ORACLE_VECTORSTORE_ADD_BATCH_SIZE", DEFAULT_ADD_BATCH_SIZE);
             addInBatches(vectorStore, chunks, addBatchSize);
+            RetrievalAugmentationAdvisor retrievalAugmentationAdvisor = retrievalAugmentationAdvisor(vectorStore);
 
             printStartupSummary(documents.size(), chunks.size(), addBatchSize, sessionId);
-            runChatLoop(scanner, assistant, vectorStore, sessionId);
+            runChatLoop(scanner, assistant, vectorStore, retrievalAugmentationAdvisor, sessionId);
         }
     }
 
     private static void runChatLoop(Scanner scanner, ChatClient assistant, OracleVectorStore vectorStore,
-            String sessionId) {
+            RetrievalAugmentationAdvisor retrievalAugmentationAdvisor, String sessionId) {
         while (true) {
             System.out.print("You: ");
             if (!scanner.hasNextLine()) {
@@ -120,14 +126,14 @@ public final class OracleEmbeddingVectorStoreSample {
                 return;
             }
 
-            List<Document> matches = vectorStore.similaritySearch(SearchRequest.builder()
-                    .query(input)
-                    .topK(3)
-                    .similarityThresholdAll()
-                    .build());
             try {
-                String answer = generateAnswer(assistant, sessionId, input, matches);
+                String answer = generateAnswer(assistant, retrievalAugmentationAdvisor, sessionId, input);
                 System.out.printf("Assistant: %s%n", answer);
+                List<Document> matches = vectorStore.similaritySearch(SearchRequest.builder()
+                        .query(input)
+                        .topK(3)
+                        .similarityThresholdAll()
+                        .build());
                 for (Document match : matches) {
                     System.out.printf("score=%s text=%s%n", match.getScore(), match.getText());
                 }
@@ -169,22 +175,22 @@ public final class OracleEmbeddingVectorStoreSample {
         }
     }
 
-    private static String generateAnswer(ChatClient assistant, String sessionId, String input, List<Document> matches) {
+    private static String generateAnswer(ChatClient assistant,
+            RetrievalAugmentationAdvisor retrievalAugmentationAdvisor, String sessionId, String input) {
         return assistant.prompt()
+                .advisors(retrievalAugmentationAdvisor)
                 .system("""
                         You are a helpful assistant.
 
                         If the user asks general conversational questions, answer normally.
+                        Do not refuse harmless technical questions.
 
                         If the user asks about Oracle sample code, embeddings, vector stores, chunking,
                         database tables, or loaded documents, use the retrieved context.
 
                         If a document-specific answer cannot be grounded in the retrieved context,
                         say that the Oracle vector store did not return enough context.
-
-                        Retrieved context:
-                        %s
-                        """.formatted(formatRetrievedContext(matches)))
+                        """)
                 .user(input)
                 .advisors(advisor -> advisor
                         .param(SessionMemoryAdvisor.SESSION_ID_CONTEXT_KEY, sessionId)
@@ -193,24 +199,14 @@ public final class OracleEmbeddingVectorStoreSample {
                 .content();
     }
 
-    private static String formatRetrievedContext(List<Document> matches) {
-        if (matches.isEmpty()) {
-            return "No matching chunks were returned.";
-        }
-
-        StringBuilder out = new StringBuilder();
-        for (int i = 0; i < matches.size(); i++) {
-            Document match = matches.get(i);
-            out.append("Chunk ")
-                    .append(i + 1)
-                    .append(" score=")
-                    .append(match.getScore())
-                    .append(System.lineSeparator())
-                    .append(match.getText())
-                    .append(System.lineSeparator())
-                    .append(System.lineSeparator());
-        }
-        return out.toString();
+    private static RetrievalAugmentationAdvisor retrievalAugmentationAdvisor(VectorStore vectorStore) {
+        return RetrievalAugmentationAdvisor.builder()
+                .documentRetriever(VectorStoreDocumentRetriever.builder()
+                        .vectorStore(vectorStore)
+                        .topK(3)
+                        .similarityThreshold(0.2)
+                        .build())
+                .build();
     }
 
     private static SessionRepository buildSessionRepository(DataSource dataSource) {

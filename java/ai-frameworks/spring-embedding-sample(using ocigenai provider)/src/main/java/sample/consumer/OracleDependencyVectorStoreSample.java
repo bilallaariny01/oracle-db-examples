@@ -11,6 +11,8 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
+import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
 import org.springframework.ai.oracle.chunking.DocumentSplitter;
 import org.springframework.ai.oracle.chunking.OracleChunkingPreferences;
 import org.springframework.ai.oracle.embedding.OracleEmbeddingModel;
@@ -19,6 +21,7 @@ import org.springframework.ai.oracle.embedding.OracleEmbeddingPreferences;
 import org.springframework.ai.oracle.loader.OracleDocumentPreferences;
 import org.springframework.ai.oracle.loader.OracleDocumentReader;
 import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.oracle.OracleVectorStore;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
@@ -97,6 +100,7 @@ public final class OracleDependencyVectorStoreSample {
         addDocumentsInBatches(vectorStore, chunks, addBatchSize);
 
         ChatClient assistant = ChatClient.builder(ollamaChatModel()).build();
+        RetrievalAugmentationAdvisor retrievalAugmentationAdvisor = retrievalAugmentationAdvisor(vectorStore);
 
         System.out.printf("Loaded %d documents as %d chunks into %s.%n", documents.size(), chunks.size(), TABLE_NAME);
         System.out.printf("Embedding provider: %s%n", embeddingProvider);
@@ -120,25 +124,19 @@ public final class OracleDependencyVectorStoreSample {
                     break;
                 }
 
-                List<Document> results = vectorStore.similaritySearch(
-                        SearchRequest.builder().query(query).topK(3).similarityThresholdAll().build());
-
                 String answer;
                 try {
-                    answer = answerWithRetrievedContext(assistant, query, results);
+                    answer = answerWithRetrievedContext(assistant, query, retrievalAugmentationAdvisor);
                 }
                 catch (RuntimeException ex) {
-                    if (results.isEmpty()) {
-                        answer = "I couldn't generate a chat response right now, and no vector context was found.";
-                    }
-                    else {
-                        answer = results.get(0).getText();
-                    }
+                    answer = "I couldn't generate a chat response right now.";
                 }
 
                 System.out.printf("Assistant: %s%n", answer);
 
                 if (showRetrievalDebug) {
+                    List<Document> results = vectorStore.similaritySearch(
+                            SearchRequest.builder().query(query).topK(3).similarityThresholdAll().build());
                     for (Document result : results) {
                         System.out.printf("score=%s text=%s%n", result.getScore(), result.getText());
                     }
@@ -152,11 +150,13 @@ public final class OracleDependencyVectorStoreSample {
      *
      * @param assistant chat client used to generate the response.
      * @param userInput user question text.
-     * @param results retrieved chunks to include in the system prompt.
+     * @param retrievalAugmentationAdvisor advisor that injects retrieved context.
      * @return generated assistant response text.
      */
-    private static String answerWithRetrievedContext(ChatClient assistant, String userInput, List<Document> results) {
+    private static String answerWithRetrievedContext(ChatClient assistant, String userInput,
+            RetrievalAugmentationAdvisor retrievalAugmentationAdvisor) {
         return assistant.prompt()
+                .advisors(retrievalAugmentationAdvisor)
                 .system("""
                         You are a helpful assistant.
 
@@ -167,39 +167,20 @@ public final class OracleDependencyVectorStoreSample {
                         database tables, or loaded documents, use the retrieved context below.
 
                         If the user asks a document-specific question and context is insufficient, say that clearly.
-
-                        Retrieved context:
-                        %s
-                        """.formatted(retrievedContext(results)))
+                        """)
                 .user(userInput)
                 .call()
                 .content();
     }
 
-    /**
-     * Formats retrieved chunks into a readable prompt context section.
-     *
-     * @param results retrieved documents from similarity search.
-     * @return formatted context text, or a fallback message when no matches exist.
-     */
-    private static String retrievedContext(List<Document> results) {
-        if (results.isEmpty()) {
-            return "No matching chunks were returned.";
-        }
-
-        StringBuilder context = new StringBuilder();
-        for (int i = 0; i < results.size(); i++) {
-            Document result = results.get(i);
-            context.append("Chunk ")
-                    .append(i + 1)
-                    .append(" score=")
-                    .append(result.getScore())
-                    .append(System.lineSeparator())
-                    .append(result.getText())
-                    .append(System.lineSeparator())
-                    .append(System.lineSeparator());
-        }
-        return context.toString();
+    private static RetrievalAugmentationAdvisor retrievalAugmentationAdvisor(VectorStore vectorStore) {
+        return RetrievalAugmentationAdvisor.builder()
+                .documentRetriever(VectorStoreDocumentRetriever.builder()
+                        .vectorStore(vectorStore)
+                        .topK(3)
+                        .similarityThreshold(0.2)
+                        .build())
+                .build();
     }
 
     /**
