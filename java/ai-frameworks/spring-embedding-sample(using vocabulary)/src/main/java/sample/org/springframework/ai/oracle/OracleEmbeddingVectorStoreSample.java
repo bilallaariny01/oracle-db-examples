@@ -13,8 +13,8 @@ import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
 import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
-import org.springframework.ai.oracle.chunking.DocumentSplitter;
 import org.springframework.ai.oracle.chunking.OracleChunkingPreferences;
+import org.springframework.ai.oracle.chunking.OracleDocumentSplitter;
 import org.springframework.ai.oracle.embedding.OracleEmbeddingModel;
 import org.springframework.ai.oracle.embedding.OracleEmbeddingOptions;
 import org.springframework.ai.oracle.embedding.OracleEmbeddingPreferences;
@@ -29,6 +29,7 @@ import org.springframework.ai.session.jdbc.OracleJdbcSessionRepositoryDialect;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.oracle.OracleVectorStore;
+import org.springframework.ai.vectorstore.oracle.OracleVectorStore.OracleVectorStoreDistanceType;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -93,6 +94,8 @@ public final class OracleEmbeddingVectorStoreSample {
             OracleVectorStore vectorStore = OracleVectorStore.builder(jdbcTemplate, embeddingModel)
                     .tableName(VECTOR_TABLE_NAME)
                     .dimensions(dimensions)
+                    .distanceType(OracleVectorStoreDistanceType.COSINE)
+                    .forcedNormalization(true)
                     .initializeSchema(true)
                     .removeExistingVectorStoreTable(true)
                     .build();
@@ -241,7 +244,7 @@ public final class OracleEmbeddingVectorStoreSample {
         return reader.get();
     }
 
-    private static DocumentSplitter buildDocumentSplitter(DataSource dataSource) {
+    private static OracleDocumentSplitter buildDocumentSplitter(DataSource dataSource) {
         String chunkBy = env("ORACLE_CHUNK_BY", DEFAULT_CHUNK_BY);
         OracleChunkingPreferences.Builder options = OracleChunkingPreferences.builder()
                 .by(chunkBy)
@@ -256,7 +259,7 @@ public final class OracleEmbeddingVectorStoreSample {
             options.vocabulary(env("ORACLE_CHUNK_VOCABULARY", DEFAULT_CHUNK_VOCABULARY));
         }
 
-        return DocumentSplitter.builder(dataSource).preferences(options.build()).build();
+        return OracleDocumentSplitter.builder(dataSource).preferences(options.build()).build();
     }
 
     private static OracleEmbeddingModel buildEmbeddingModel(DataSource dataSource, int dimensions) {
@@ -287,7 +290,7 @@ public final class OracleEmbeddingVectorStoreSample {
 
         return OllamaChatModel.builder()
                 .ollamaApi(buildOllamaApi())
-                .defaultOptions(options)
+                .options(options)
                 .build();
     }
 

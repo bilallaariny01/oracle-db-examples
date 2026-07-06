@@ -1,17 +1,17 @@
-# Spring AI Oracle Dependency Sample
+# Spring AI Oracle Spring Boot Sample
 
 This project is a runnable end-to-end Retrieval-Augmented Generation (RAG) sample using Oracle Database + Spring AI.
 
 It demonstrates how to:
 
 - Load documents with `OracleDocumentReader`
-- Split documents into chunks with `OracleDocumentSplitter`
+- Split documents into chunks with `DocumentSplitter`
 - Generate embeddings with `OracleEmbeddingModel`
 - Store and search vectors with `OracleVectorStore`
 - Answer user questions with Ollama (`ChatClient`) using retrieved context
 - Keep chat memory in Oracle with `spring-ai-session-jdbc`
 
-The sample is dependency-driven: Oracle chunking/embedding/loader implementations are consumed from Maven dependencies in `pom.xml`.
+This variant is implemented as a Spring Boot project.
 
 ## High-Level Flow
 
@@ -42,7 +42,7 @@ Core libraries used:
 
 ## Prerequisites
 
-- JDK 17+
+- JDK 21+
 - Maven 3.9+
 - Oracle Database with vector features available
 - Oracle user with permissions to create/use vector store objects
@@ -95,7 +95,7 @@ If using ONNX initialization at startup, Oracle must have access to an ONNX file
 
 This sample intentionally supports a one-time ONNX load strategy.
 
-- If `ORACLE_ONNX_LOAD_ON_STARTUP=false`, `embeddingModel.afterPropertiesSet()` does not load ONNX.
+- If `ORACLE_ONNX_LOAD_ON_STARTUP=false`, ONNX initialization is skipped.
 - If `ORACLE_ONNX_LOAD_ON_STARTUP=true`, choose exactly one load mode:
   - Local mode: set `ORACLE_ONNX_DIRECTORY_ALIAS` and `ORACLE_ONNX_FILE`.
   - Cloud mode: set `ORACLE_ONNX_URI` and optionally `ORACLE_ONNX_CREDENTIAL`.
@@ -148,7 +148,14 @@ export OLLAMA_CHAT_MODEL='qwen3:8b'
 Run:
 
 ```bash
-mvn exec:java
+mvn spring-boot:run
+```
+
+Or package and run:
+
+```bash
+mvn -DskipTests package
+java -jar target/spring-embedding-with-session-persistence-spring-boot-sample-1.0.0-SNAPSHOT.jar
 ```
 
 Build only:

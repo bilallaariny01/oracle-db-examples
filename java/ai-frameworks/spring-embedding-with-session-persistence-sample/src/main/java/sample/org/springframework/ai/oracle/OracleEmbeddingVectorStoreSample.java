@@ -13,8 +13,8 @@ import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
 import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
-import org.springframework.ai.oracle.chunking.DocumentSplitter;
 import org.springframework.ai.oracle.chunking.OracleChunkingPreferences;
+import org.springframework.ai.oracle.chunking.OracleDocumentSplitter;
 import org.springframework.ai.oracle.embedding.OracleEmbeddingModel;
 import org.springframework.ai.oracle.embedding.OracleEmbeddingOptions;
 import org.springframework.ai.oracle.embedding.OracleEmbeddingPreferences;
@@ -237,7 +237,7 @@ public final class OracleEmbeddingVectorStoreSample {
         return reader.get();
     }
 
-    private static DocumentSplitter buildDocumentSplitter(DataSource dataSource) {
+    private static OracleDocumentSplitter buildDocumentSplitter(DataSource dataSource) {
         OracleChunkingPreferences options = OracleChunkingPreferences.builder()
                 .by(env("ORACLE_CHUNK_BY", DEFAULT_CHUNK_BY))
                 .max(envInt("ORACLE_CHUNK_MAX", DEFAULT_CHUNK_MAX))
@@ -248,7 +248,7 @@ public final class OracleEmbeddingVectorStoreSample {
                 .extended(true)
                 .build();
 
-        return DocumentSplitter.builder(dataSource).preferences(options).build();
+        return OracleDocumentSplitter.builder(dataSource).preferences(options).build();
     }
 
     private static OracleEmbeddingModel buildEmbeddingModel(DataSource dataSource, int dimensions) {
@@ -279,7 +279,7 @@ public final class OracleEmbeddingVectorStoreSample {
 
         return OllamaChatModel.builder()
                 .ollamaApi(buildOllamaApi())
-                .defaultOptions(options)
+                .options(options)
                 .build();
     }
 

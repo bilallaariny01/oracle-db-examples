@@ -3,7 +3,7 @@
 This project is a runnable sample app that demonstrates an end-to-end Oracle RAG flow with Spring AI:
 
 1. Load a classpath document with `OracleDocumentReader`.
-2. Split it with `DocumentSplitter` (default: `by=vocabulary`).
+2. Split it with `OracleDocumentSplitter` (default: `by=vocabulary`).
 3. Embed chunks with `OracleEmbeddingModel`.
 4. Store vectors in Oracle with `OracleVectorStore`.
 5. Start an interactive terminal chat (Ollama) that uses retrieved chunks as context.

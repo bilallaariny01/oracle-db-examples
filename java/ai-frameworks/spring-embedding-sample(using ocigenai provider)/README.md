@@ -95,6 +95,6 @@ Type questions in the console. Type `exit` or `quit` to stop.
 
 `pom.xml` defaults to:
 
-- `org.springframework.ai:spring-ai-oracle:2.0.0-SNAPSHOT`
+- `org.springframework.ai:spring-ai-oracle:2.0.1-SNAPSHOT`
 
 If your built artifact version is different, update `spring.ai.oracle.version` in `pom.xml`.

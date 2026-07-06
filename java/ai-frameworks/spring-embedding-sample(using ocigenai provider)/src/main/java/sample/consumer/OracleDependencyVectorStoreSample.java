@@ -11,9 +11,10 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.ai.oracle.chunking.OracleDocumentSplitter;
 import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
+import org.springframework.ai.rag.generation.augmentation.ContextualQueryAugmenter;
 import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
-import org.springframework.ai.oracle.chunking.DocumentSplitter;
 import org.springframework.ai.oracle.chunking.OracleChunkingPreferences;
 import org.springframework.ai.oracle.embedding.OracleEmbeddingModel;
 import org.springframework.ai.oracle.embedding.OracleEmbeddingOptions;
@@ -60,6 +61,8 @@ public final class OracleDependencyVectorStoreSample {
 
     private static final int DEFAULT_VECTORSTORE_ADD_BATCH_SIZE = 16;
 
+    private static final int RAG_ADVISOR_ORDER = 0;
+
     /**
      * Prevents instantiation of this utility-style sample class.
      */
@@ -87,13 +90,15 @@ public final class OracleDependencyVectorStoreSample {
         OracleVectorStore vectorStore = OracleVectorStore.builder(jdbcTemplate, embeddingModel)
                 .tableName(TABLE_NAME)
                 .dimensions(dimensions)
+                .distanceType(OracleVectorStore.OracleVectorStoreDistanceType.COSINE)
+                .forcedNormalization(true)
                 .initializeSchema(true)
                 .removeExistingVectorStoreTable(true)
                 .build();
         vectorStore.afterPropertiesSet();
 
         List<Document> documents = loadDocuments(dataSource);
-        DocumentSplitter splitter = documentSplitter(dataSource);
+        OracleDocumentSplitter splitter = documentSplitter(dataSource);
         List<Document> chunks = splitter.split(documents);
 
         int addBatchSize = envInt("ORACLE_VECTORSTORE_ADD_BATCH_SIZE", DEFAULT_VECTORSTORE_ADD_BATCH_SIZE);
@@ -129,7 +134,9 @@ public final class OracleDependencyVectorStoreSample {
                     answer = answerWithRetrievedContext(assistant, query, retrievalAugmentationAdvisor);
                 }
                 catch (RuntimeException ex) {
-                    answer = "I couldn't generate a chat response right now.";
+                    String failure = rootCauseMessage(ex);
+                    System.err.printf("Chat generation failed: %s%n", failure);
+                    answer = "I couldn't generate a chat response right now. Reason: " + failure;
                 }
 
                 System.out.printf("Assistant: %s%n", answer);
@@ -163,10 +170,13 @@ public final class OracleDependencyVectorStoreSample {
                         If the user asks a general conversational question (for example greetings, small talk,
                         casual questions, or non-Oracle topics), answer naturally without requiring retrieved context.
 
-                        If the user asks about Oracle sample code, embeddings, vector stores, chunking,
-                        database tables, or loaded documents, use the retrieved context below.
+                        If the user asks about this sample, the Oracle dependency sample, Oracle sample code,
+                        embeddings, vector stores, chunking, database tables, or loaded documents, use only the
+                        retrieved context. In this app, "Oracle dependency sample" means the loaded markdown
+                        document, not generic Oracle Database object dependencies.
 
-                        If the user asks a document-specific question and context is insufficient, say that clearly.
+                        If the user asks a document-specific question and context is insufficient, say that no
+                        matching context was retrieved. Do not answer from general Oracle knowledge.
                         """)
                 .user(userInput)
                 .call()
@@ -175,10 +185,13 @@ public final class OracleDependencyVectorStoreSample {
 
     private static RetrievalAugmentationAdvisor retrievalAugmentationAdvisor(VectorStore vectorStore) {
         return RetrievalAugmentationAdvisor.builder()
+                .order(RAG_ADVISOR_ORDER)
                 .documentRetriever(VectorStoreDocumentRetriever.builder()
                         .vectorStore(vectorStore)
                         .topK(3)
-                        .similarityThreshold(0.2)
+                        .build())
+                .queryAugmenter(ContextualQueryAugmenter.builder()
+                        .allowEmptyContext(false)
                         .build())
                 .build();
     }
@@ -230,18 +243,18 @@ public final class OracleDependencyVectorStoreSample {
      * @param dataSource database data source used for splitter creation.
      * @return configured document splitter.
      */
-    private static DocumentSplitter documentSplitter(DataSource dataSource) {
+    private static OracleDocumentSplitter documentSplitter(DataSource dataSource) {
         OracleChunkingPreferences options = OracleChunkingPreferences.builder()
                 .by(env("ORACLE_CHUNK_BY", "words"))
-                .max(envInt("ORACLE_CHUNK_MAX", 20))
-                .overlap(envInt("ORACLE_CHUNK_OVERLAP", 5))
+                .max(envInt("ORACLE_CHUNK_MAX", 200))
+                .overlap(envInt("ORACLE_CHUNK_OVERLAP", 0))
                 .split(env("ORACLE_CHUNK_SPLIT", "sentence"))
                 .language("american")
                 .normalize("all")
                 .extended(true)
                 .build();
 
-        return DocumentSplitter.builder(dataSource).preferences(options).build();
+        return OracleDocumentSplitter.builder(dataSource).preferences(options).build();
     }
 
     /**
@@ -287,7 +300,7 @@ public final class OracleDependencyVectorStoreSample {
                 .maxTokens(150)
                 .build();
 
-        return OllamaChatModel.builder().ollamaApi(ollamaApi()).defaultOptions(options).build();
+        return OllamaChatModel.builder().ollamaApi(ollamaApi()).options(options).build();
     }
 
     /**
@@ -381,5 +394,23 @@ public final class OracleDependencyVectorStoreSample {
     private static boolean envBoolean(String name, boolean defaultValue) {
         String value = System.getenv(name);
         return StringUtils.hasText(value) ? Boolean.parseBoolean(value.trim()) : defaultValue;
+    }
+
+    /**
+     * Produces a concise diagnostic for chat failures surfaced in the CLI.
+     *
+     * @param ex exception thrown while generating a chat response.
+     * @return root cause class and message.
+     */
+    private static String rootCauseMessage(Throwable ex) {
+        Throwable cause = ex;
+        while (cause.getCause() != null && cause.getCause() != cause) {
+            cause = cause.getCause();
+        }
+
+        String message = cause.getMessage();
+        return StringUtils.hasText(message)
+                ? cause.getClass().getSimpleName() + ": " + message
+                : cause.getClass().getSimpleName();
     }
 }
