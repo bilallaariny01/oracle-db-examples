@@ -22,8 +22,8 @@ import org.springframework.ai.session.advisor.SessionMemoryAdvisor;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.oracle.OracleVectorStore;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -33,13 +33,15 @@ class OracleSampleRunner implements CommandLineRunner {
     private static final double RAG_ROUTING_THRESHOLD = 0.2;
 
     private final DataSource dataSource;
+    private final ResourceLoader resourceLoader;
     private final ChatClient assistant;
     private final OracleVectorStore vectorStore;
     private final RetrievalAugmentationAdvisor retrievalAugmentationAdvisor;
 
-    OracleSampleRunner(DataSource dataSource, ChatClient assistant, OracleVectorStore vectorStore,
-            RetrievalAugmentationAdvisor retrievalAugmentationAdvisor) {
+    OracleSampleRunner(DataSource dataSource, ResourceLoader resourceLoader, ChatClient assistant,
+            OracleVectorStore vectorStore, RetrievalAugmentationAdvisor retrievalAugmentationAdvisor) {
         this.dataSource = dataSource;
+        this.resourceLoader = resourceLoader;
         this.assistant = assistant;
         this.vectorStore = vectorStore;
         this.retrievalAugmentationAdvisor = retrievalAugmentationAdvisor;
@@ -142,12 +144,11 @@ class OracleSampleRunner implements CommandLineRunner {
     }
 
     private List<Document> loadSourceDocuments() {
-        String resourcePath = OracleSampleConfiguration.env("ORACLE_SOURCE_DOCUMENT_RESOURCE",
+        String resourceLocation = OracleSampleConfiguration.env("ORACLE_SOURCE_DOCUMENT_RESOURCE",
                 OracleSampleConfiguration.DEFAULT_SOURCE_RESOURCE);
-        Resource resource = new ClassPathResource(resourcePath);
+        Resource resource = this.resourceLoader.getResource(resourceLocation);
         if (!resource.exists()) {
-            throw new IllegalStateException(
-                    "Resource not found on classpath: " + resourcePath + " (add it under src/main/resources)");
+            throw new IllegalStateException("Resource not found: " + resourceLocation);
         }
 
         OracleDocumentReader reader = OracleDocumentReader.builder(dataSource)
@@ -197,7 +198,7 @@ class OracleSampleRunner implements CommandLineRunner {
         System.out.printf("ONNX load on startup enabled: %s%n", true);
         System.out.printf("Chat started with Ollama model %s.%n",
                 OracleSampleConfiguration.env("OLLAMA_CHAT_MODEL", "qwen3:8b"));
-        System.out.printf("Source document resource: %s%n",
+        System.out.printf("Source document resource location: %s%n",
                 OracleSampleConfiguration.env("ORACLE_SOURCE_DOCUMENT_RESOURCE",
                         OracleSampleConfiguration.DEFAULT_SOURCE_RESOURCE));
         System.out.printf("Oracle session id: %s%n", sessionId);

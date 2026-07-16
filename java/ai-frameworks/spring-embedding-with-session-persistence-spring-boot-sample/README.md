@@ -19,7 +19,7 @@ This variant is implemented as a Spring Boot project.
 2. Build the Oracle embedding model using `ORACLE_EMBEDDING_MODEL` and dimensions.
 3. Optionally load ONNX at startup (one-time) if enabled.
 4. Create/reset Oracle vector store table (`SPRING_AI_ORACLE_SAMPLE_STORE`).
-5. Read source document from classpath (`sample-documents/oracle-sample.md` by default).
+5. Read a classpath, file, or URL resource (`classpath:/sample-documents/oracle-sample.md` by default).
 6. Chunk documents using Oracle chunking preferences.
 7. Embed and insert chunks into vector store.
 8. Accept user question from terminal.
@@ -74,7 +74,7 @@ If using ONNX initialization at startup, Oracle must have access to an ONNX file
 - `ORACLE_EMBEDDING_DIMENSIONS` (default: `384`)
 - `ORACLE_EMBEDDING_BATCHING` (default: `false`)
 - `ORACLE_VECTORSTORE_ADD_BATCH_SIZE` (default: `16`)
-- `ORACLE_SOURCE_DOCUMENT_RESOURCE` (default: `sample-documents/oracle-sample.md`)
+- `ORACLE_SOURCE_DOCUMENT_RESOURCE` (default: `classpath:/sample-documents/oracle-sample.md`)
 - `ORACLE_CHUNK_BY` (default: `words`)
 - `ORACLE_CHUNK_MAX` (default: `80`)
 - `ORACLE_CHUNK_OVERLAP` (default: `16`)
@@ -82,6 +82,14 @@ If using ONNX initialization at startup, Oracle must have access to an ONNX file
 - `ORACLE_SAMPLE_SESSION_ID` (default: `oracle-sample-session`)
 - `OLLAMA_BASE_URL` (default: `http://localhost:11434`)
 - `OLLAMA_CHAT_MODEL` (default: `qwen3:8b`)
+
+The source document value is a Spring resource location. For example:
+
+```bash
+export ORACLE_SOURCE_DOCUMENT_RESOURCE='classpath:/sample-documents/oracle-sample.md'
+# Or: file:/absolute/path/to/document.md
+# Or: https://example.com/document.md
+```
 
 ### ONNX Startup Initialization Controls
 

@@ -12,7 +12,7 @@ public class OracleSampleProperties {
 
     private String vectorTableName = "SPRING_AI_ORACLE_SAMPLE_STORE";
 
-    private String sourceDocumentResource = "sample-documents/oracle-sample.md";
+    private String sourceDocumentResource = "classpath:/sample-documents/oracle-sample.md";
 
     private int vectorStoreAddBatchSize = 16;
 

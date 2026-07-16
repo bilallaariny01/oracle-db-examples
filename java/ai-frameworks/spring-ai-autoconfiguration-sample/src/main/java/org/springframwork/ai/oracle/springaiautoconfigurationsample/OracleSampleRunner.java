@@ -181,7 +181,7 @@ class OracleSampleRunner implements CommandLineRunner {
         System.out.printf("Chat started with Ollama model %s.%n", this.properties.getOllamaChatModel());
         System.out.printf("Ollama thinking enabled: %s%n", this.properties.isOllamaChatThinkingEnabled());
         System.out.printf("Ollama max tokens: %s%n", this.properties.getOllamaChatMaxTokens());
-        System.out.printf("Source document resource: %s%n", this.properties.getSourceDocumentResource());
+        System.out.printf("Source document resource location: %s%n", this.properties.getSourceDocumentResource());
         System.out.printf("Oracle session id: %s%n", this.properties.getSessionId());
         System.out.println("Type 'exit' or 'quit' to stop.");
     }

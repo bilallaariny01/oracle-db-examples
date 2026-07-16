@@ -24,7 +24,7 @@ import org.springframework.ai.oracle.loader.OracleDocumentReader;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.oracle.OracleVectorStore;
-import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.Resource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -57,7 +57,7 @@ public final class OracleDependencyVectorStoreSample {
 
     private static final String TABLE_NAME = "SPRING_AI_ORACLE_DEPENDENCY_SAMPLE_STORE";
 
-    private static final String DEFAULT_SOURCE_DOC_RESOURCE = "sample-documents/oracle-sample.md";
+    private static final String DEFAULT_SOURCE_DOC_RESOURCE = "classpath:/sample-documents/oracle-sample.md";
 
     private static final int DEFAULT_VECTORSTORE_ADD_BATCH_SIZE = 16;
 
@@ -215,18 +215,17 @@ public final class OracleDependencyVectorStoreSample {
     }
 
     /**
-     * Loads source documents from a classpath resource using Oracle document
-     * reader preferences.
+     * Loads source documents from a Spring resource using Oracle document reader
+     * preferences.
      *
      * @param dataSource database data source used by the reader.
      * @return loaded source documents.
      */
     private static List<Document> loadDocuments(DataSource dataSource) {
-        String resourcePath = env("ORACLE_SOURCE_DOCUMENT_RESOURCE", DEFAULT_SOURCE_DOC_RESOURCE);
-        Resource resource = new ClassPathResource(resourcePath);
+        String resourceLocation = env("ORACLE_SOURCE_DOCUMENT_RESOURCE", DEFAULT_SOURCE_DOC_RESOURCE);
+        Resource resource = new DefaultResourceLoader().getResource(resourceLocation);
         if (!resource.exists()) {
-            throw new IllegalStateException(
-                    "Resource not found on classpath: " + resourcePath + " (add it under src/main/resources)");
+            throw new IllegalStateException("Resource not found: " + resourceLocation);
         }
 
         return OracleDocumentReader.builder(dataSource)

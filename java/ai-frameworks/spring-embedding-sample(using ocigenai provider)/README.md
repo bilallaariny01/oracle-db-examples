@@ -64,7 +64,12 @@ Optional:
 export ORACLE_EMBEDDING_PROXY='http://proxy:8080'
 export ORACLE_VECTORSTORE_ADD_BATCH_SIZE='16'
 export ORACLE_CHUNK_BY='words'
+export ORACLE_SOURCE_DOCUMENT_RESOURCE='classpath:/sample-documents/oracle-sample.md'
 ```
+
+`ORACLE_SOURCE_DOCUMENT_RESOURCE` accepts a Spring resource location. Use
+`file:/absolute/path/to/document.md` for a filesystem resource or an `https://`
+URL for a remote resource.
 
 ## 5) Chat response setup (optional but recommended)
 

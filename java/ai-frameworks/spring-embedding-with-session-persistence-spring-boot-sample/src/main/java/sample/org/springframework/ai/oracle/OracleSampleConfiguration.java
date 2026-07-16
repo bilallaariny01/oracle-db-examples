@@ -38,7 +38,7 @@ import org.springframework.util.StringUtils;
 class OracleSampleConfiguration {
 
     static final String VECTOR_TABLE_NAME = "SPRING_AI_ORACLE_SAMPLE_STORE";
-    static final String DEFAULT_SOURCE_RESOURCE = "sample-documents/oracle-sample.md";
+    static final String DEFAULT_SOURCE_RESOURCE = "classpath:/sample-documents/oracle-sample.md";
     static final int DEFAULT_EMBEDDING_DIMENSIONS = 384;
     static final int DEFAULT_ADD_BATCH_SIZE = 16;
 

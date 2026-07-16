@@ -2,7 +2,7 @@
 
 This project is a runnable sample app that demonstrates an end-to-end Oracle RAG flow with Spring AI:
 
-1. Load a classpath document with `OracleDocumentReader`.
+1. Load a classpath, file, or URL resource with `OracleDocumentReader`.
 2. Split it with `OracleDocumentSplitter` (default: `by=vocabulary`).
 3. Embed chunks with `OracleEmbeddingModel`.
 4. Store vectors in Oracle with `OracleVectorStore`.
@@ -84,8 +84,10 @@ After startup, ask questions in the terminal. Type `exit` or `quit` to stop.
 ## Common Optional Variables
 
 ```bash
-# Source document on classpath (default: sample-documents/oracle-sample.md)
-export ORACLE_SOURCE_DOCUMENT_RESOURCE='sample-documents/oracle-sample.md'
+# Source document (default: classpath:/sample-documents/oracle-sample.md)
+export ORACLE_SOURCE_DOCUMENT_RESOURCE='classpath:/sample-documents/oracle-sample.md'
+# Or: file:/absolute/path/to/document.md
+# Or: https://example.com/document.md
 
 # Embedding model settings
 export ORACLE_EMBEDDING_MODEL='ALL_MINILM_L12_V2'
@@ -134,6 +136,6 @@ Do not mix local and cloud ONNX variables in the same run.
 ## Notes
 
 1. The sample recreates vector-store table `SPRING_AI_ORACLE_SAMPLE_STORE` on startup.
-2. If `ORACLE_SOURCE_DOCUMENT_RESOURCE` is invalid, startup fails with a classpath resource error.
+2. If `ORACLE_SOURCE_DOCUMENT_RESOURCE` is invalid, startup fails with a resource-not-found error.
 3. If vocabulary mode is enabled and the vocabulary name is missing/invalid, chunking fails.
 4. Session-memory tables come from `src/main/resources/session.sql`; you can pre-run the script or use startup auto-initialization.

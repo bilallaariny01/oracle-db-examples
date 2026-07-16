@@ -31,6 +31,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.oracle.OracleVectorStore;
 import org.springframework.ai.vectorstore.oracle.OracleVectorStore.OracleVectorStoreDistanceType;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.Resource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -49,7 +50,7 @@ import javax.sql.DataSource;
 public final class OracleEmbeddingVectorStoreSample {
 
     private static final String VECTOR_TABLE_NAME = "SPRING_AI_ORACLE_SAMPLE_STORE";
-    private static final String DEFAULT_SOURCE_RESOURCE = "sample-documents/oracle-sample.md";
+    private static final String DEFAULT_SOURCE_RESOURCE = "classpath:/sample-documents/oracle-sample.md";
     private static final int DEFAULT_EMBEDDING_DIMENSIONS = 384;
     private static final int DEFAULT_ADD_BATCH_SIZE = 16;
 
@@ -167,7 +168,7 @@ public final class OracleEmbeddingVectorStoreSample {
         System.out.printf("ONNX load on startup enabled: %s%n", true);
         System.out.printf("Chat started with Ollama model %s.%n",
                 env("OLLAMA_CHAT_MODEL", DEFAULT_OLLAMA_CHAT_MODEL));
-        System.out.printf("Source document resource: %s%n",
+        System.out.printf("Source document resource location: %s%n",
                 env("ORACLE_SOURCE_DOCUMENT_RESOURCE", DEFAULT_SOURCE_RESOURCE));
         System.out.printf("Oracle session id: %s%n", sessionId);
         System.out.println("Type 'exit' or 'quit' to stop.");
@@ -230,11 +231,10 @@ public final class OracleEmbeddingVectorStoreSample {
     }
 
     private static List<Document> loadSourceDocuments(DataSource dataSource) {
-        String resourcePath = env("ORACLE_SOURCE_DOCUMENT_RESOURCE", DEFAULT_SOURCE_RESOURCE);
-        Resource resource = new ClassPathResource(resourcePath);
+        String resourceLocation = env("ORACLE_SOURCE_DOCUMENT_RESOURCE", DEFAULT_SOURCE_RESOURCE);
+        Resource resource = new DefaultResourceLoader().getResource(resourceLocation);
         if (!resource.exists()) {
-            throw new IllegalStateException(
-                    "Resource not found on classpath: " + resourcePath + " (add it under src/main/resources)");
+            throw new IllegalStateException("Resource not found: " + resourceLocation);
         }
 
         OracleDocumentReader reader = OracleDocumentReader.builder(dataSource)
